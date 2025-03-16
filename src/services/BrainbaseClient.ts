@@ -25,7 +25,9 @@ export class BrainbaseClient extends EventEmitter {
   public async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocket(this.url);
+        this.ws = new WebSocket(this.url, {
+          maxPayload: 100 * 1024 * 1024 // 100MB
+        });
 
         this.ws.on('open', () => {
           console.log(`Connected to ${this.url}`);
@@ -109,11 +111,15 @@ export class BrainbaseClient extends EventEmitter {
       const messageObj = JSON.parse(messageData) as BrainbaseMessage;
       const action = messageObj.action;
 
+      // Log message size for debugging
+      console.log(`Received ${action} message, size: ${messageData.length} bytes`);
+
       switch (action) {
         case 'message':
         case 'response':
           // Regular non-streaming message
           const fullMessage = messageObj.data.message || '';
+          console.log(`Full message size: ${fullMessage.length} bytes`);
           this.streamBuffer = fullMessage;
           this.emit('message', fullMessage);
           break;
@@ -122,6 +128,7 @@ export class BrainbaseClient extends EventEmitter {
           // Handle streaming content
           const streamChunk = messageObj.data.message || '';
           this.streamBuffer += streamChunk;
+          console.log(`Stream chunk size: ${streamChunk.length} bytes, total buffer: ${this.streamBuffer.length} bytes`);
           this.emit('stream', streamChunk);
           break;
 
@@ -135,6 +142,7 @@ export class BrainbaseClient extends EventEmitter {
 
         case 'done':
           // End of a streamed message
+          console.log(`Stream complete, final buffer size: ${this.streamBuffer.length} bytes`);
           if (this.streamBuffer) {
             this.emit('complete', this.streamBuffer);
           }

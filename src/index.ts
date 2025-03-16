@@ -22,7 +22,8 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, '../public')));
@@ -207,6 +208,8 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
     
+    console.log(`Processing message: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`);
+    
     const workerId = process.env.WORKER_ID;
     const flowId = process.env.FLOW_ID;
     const apiKey = process.env.BRAINBASE_API_KEY;
@@ -226,6 +229,7 @@ app.post('/api/chat', async (req, res) => {
     let isComplete = false;
     
     const messageHandler = (msg: string) => {
+      console.log(`Received message, length: ${msg.length} bytes`);
       // If we haven't received the initial message yet, store it
       if (!initialResponse) {
         initialResponse = msg;
@@ -236,15 +240,19 @@ app.post('/api/chat', async (req, res) => {
     };
     
     const streamHandler = (chunk: string) => {
+      console.log(`Received stream chunk, length: ${chunk.length} bytes`);
       // If we already have an initial response, this is part of the message response
       if (initialResponse) {
         messageResponse += chunk;
+        console.log(`Updated message response length: ${messageResponse.length} bytes`);
       } else {
         initialResponse += chunk;
+        console.log(`Updated initial response length: ${initialResponse.length} bytes`);
       }
     };
     
     const completeHandler = () => {
+      console.log(`Stream complete, message response length: ${messageResponse.length} bytes`);
       isComplete = true;
     };
     
@@ -262,6 +270,7 @@ app.post('/api/chat', async (req, res) => {
     await new Promise<void>((resolve) => {
       const checkComplete = () => {
         if (isComplete || initialResponse) {
+          console.log(`Initial response received, length: ${initialResponse.length} bytes`);
           resolve();
         } else {
           setTimeout(checkComplete, 100);
@@ -269,22 +278,27 @@ app.post('/api/chat', async (req, res) => {
       };
       
       // Increase timeout to allow for longer responses
-      setTimeout(checkComplete, 2000);
+      setTimeout(checkComplete, 5000);
     });
     
     // Add a small delay to ensure we get the complete response
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Reset completion flag for the next message
     isComplete = false;
     
     // Send the user's message
+    console.log('Sending user message to Brainbase');
     await client.sendMessage(message);
     
     // Wait for response to the message
     await new Promise<void>((resolve) => {
       const checkComplete = () => {
-        if (isComplete || messageResponse) {
+        if (isComplete) {
+          console.log(`Response complete, final length: ${messageResponse.length} bytes`);
+          resolve();
+        } else if (messageResponse) {
+          console.log(`Response received but not complete, current length: ${messageResponse.length} bytes`);
           resolve();
         } else {
           setTimeout(checkComplete, 100);
@@ -292,14 +306,16 @@ app.post('/api/chat', async (req, res) => {
       };
       
       // Increase timeout to allow for longer responses
-      setTimeout(checkComplete, 2000);
+      setTimeout(checkComplete, 10000);
     });
     
     // Add a small delay to ensure we get the complete response
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Clean up
     client.disconnect();
+    
+    console.log(`Sending response to client, length: ${messageResponse.length} bytes`);
     
     // Return the response
     res.json({
@@ -412,7 +428,11 @@ app.post('/api/chat/polling', async (req, res) => {
           // Wait for the response to be complete
           await new Promise<void>((resolve) => {
             const checkComplete = () => {
-              if (isComplete || messageResponse) {
+              if (isComplete) {
+                console.log(`Polling: Response complete, final length: ${messageResponse.length} bytes`);
+                resolve();
+              } else if (messageResponse) {
+                console.log(`Polling: Response received but not complete, current length: ${messageResponse.length} bytes`);
                 resolve();
               } else {
                 setTimeout(checkComplete, 100);
@@ -420,11 +440,11 @@ app.post('/api/chat/polling', async (req, res) => {
             };
             
             // Increase timeout to allow for longer responses
-            setTimeout(checkComplete, 2000);
+            setTimeout(checkComplete, 10000);
           });
           
           // Add a small delay to ensure we get the complete response
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 2000));
           
           // Update job status to 'complete' in Supabase
           if (supabase) {
@@ -446,7 +466,16 @@ app.post('/api/chat/polling', async (req, res) => {
               if (!tableError && tableInfo && tableInfo.length > 0) {
                 const sampleRow = tableInfo[0];
                 if ('response' in sampleRow) {
-                  updateData.response = messageResponse || initialResponse;
+                  const finalResponse = messageResponse || initialResponse;
+                  console.log(`Storing response in Supabase, length: ${finalResponse.length} bytes`);
+                  
+                  // Check if response is too large for a single update
+                  if (finalResponse.length > 1000000) { // 1MB limit for safety
+                    console.log('Response is very large, truncating for Supabase storage');
+                    updateData.response = finalResponse.substring(0, 1000000) + '... [TRUNCATED DUE TO SIZE]';
+                  } else {
+                    updateData.response = finalResponse;
+                  }
                 } else {
                   console.warn("The 'response' column doesn't exist in the jobs table. Skipping response update.");
                 }
@@ -585,4 +614,155 @@ app.get('/api/jobs/:jobId', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Visit http://localhost:${PORT} to use the chat interface`);
+});
+
+// Special endpoint for large story edits
+app.post('/api/chat/story', async (req, res) => {
+  try {
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    console.log(`Processing story edit: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`);
+    
+    const workerId = process.env.WORKER_ID;
+    const flowId = process.env.FLOW_ID;
+    const apiKey = process.env.BRAINBASE_API_KEY;
+    
+    if (!workerId || !flowId || !apiKey) {
+      return res.status(500).json({ 
+        error: 'Missing environment variables. Please set WORKER_ID, FLOW_ID, and BRAINBASE_API_KEY.' 
+      });
+    }
+    
+    // Create a new client with extended timeout
+    const client = new BrainbaseClient(workerId, flowId, apiKey);
+    
+    // Set up response collection
+    let initialResponse = '';
+    let messageResponse = '';
+    let isComplete = false;
+    let lastChunkTime = 0;
+    
+    const messageHandler = (msg: string) => {
+      console.log(`Story edit: Received message, length: ${msg.length} bytes`);
+      lastChunkTime = Date.now();
+      // If we haven't received the initial message yet, store it
+      if (!initialResponse) {
+        initialResponse = msg;
+      } else {
+        // Otherwise, this is the response to our message
+        messageResponse = msg;
+      }
+    };
+    
+    const streamHandler = (chunk: string) => {
+      console.log(`Story edit: Received stream chunk, length: ${chunk.length} bytes`);
+      lastChunkTime = Date.now();
+      // If we already have an initial response, this is part of the message response
+      if (initialResponse) {
+        messageResponse += chunk;
+        console.log(`Story edit: Updated message response length: ${messageResponse.length} bytes`);
+      } else {
+        initialResponse += chunk;
+        console.log(`Story edit: Updated initial response length: ${initialResponse.length} bytes`);
+      }
+    };
+    
+    const completeHandler = () => {
+      console.log(`Story edit: Stream complete, message response length: ${messageResponse.length} bytes`);
+      isComplete = true;
+    };
+    
+    client.on('message', messageHandler);
+    client.on('stream', streamHandler);
+    client.on('complete', completeHandler);
+    client.on('error', (error) => {
+      console.error('Story edit: Client error:', error);
+    });
+    
+    // Connect to Brainbase
+    await client.connect();
+    
+    // Wait for initial message from the chatbot
+    await new Promise<void>((resolve) => {
+      const checkComplete = () => {
+        if (isComplete || initialResponse) {
+          console.log(`Story edit: Initial response received, length: ${initialResponse.length} bytes`);
+          resolve();
+        } else {
+          setTimeout(checkComplete, 100);
+        }
+      };
+      
+      // Increase timeout to allow for longer responses
+      setTimeout(checkComplete, 10000);
+    });
+    
+    // Add a small delay to ensure we get the complete response
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Reset completion flag for the next message
+    isComplete = false;
+    
+    // Send the user's message
+    console.log('Story edit: Sending user message to Brainbase');
+    await client.sendMessage(message);
+    
+    // Wait for response to the message with extended timeout
+    await new Promise<void>((resolve) => {
+      const checkComplete = () => {
+        if (isComplete) {
+          console.log(`Story edit: Response complete, final length: ${messageResponse.length} bytes`);
+          resolve();
+        } else if (messageResponse) {
+          console.log(`Story edit: Response received but not complete, current length: ${messageResponse.length} bytes`);
+          // Only resolve if we haven't received a chunk in the last 5 seconds
+          const checkInactivity = () => {
+            const inactiveTime = Date.now() - lastChunkTime;
+            console.log(`Story edit: Time since last chunk: ${inactiveTime}ms`);
+            
+            if (lastChunkTime === 0 || inactiveTime >= 5000) {
+              console.log('Story edit: No new chunks received in 5 seconds, considering response complete');
+              resolve();
+            } else {
+              setTimeout(checkInactivity, 1000);
+            }
+          };
+          
+          if (messageResponse) {
+            setTimeout(checkInactivity, 5000);
+          } else {
+            resolve();
+          }
+        } else {
+          setTimeout(checkComplete, 100);
+        }
+      };
+      
+      // Increase timeout to allow for longer responses (30 seconds)
+      setTimeout(checkComplete, 30000);
+    });
+    
+    // Add a small delay to ensure we get the complete response
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Clean up
+    client.disconnect();
+    
+    console.log(`Story edit: Sending response to client, length: ${messageResponse.length} bytes`);
+    
+    // Return the response
+    res.json({
+      response: messageResponse || 'No response received'
+    });
+  } catch (error) {
+    const errorHandler = (err: any) => {
+      console.error('Error in story edit interaction:', err);
+      res.status(500).json({ error: 'Failed to process story edit' });
+    };
+    errorHandler(error);
+  }
 }); 
