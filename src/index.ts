@@ -83,8 +83,12 @@ app.post('/api/chat/session', async (req, res) => {
         }
       };
       
-      setTimeout(checkComplete, 500);
+      // Increase timeout to allow for longer responses
+      setTimeout(checkComplete, 2000);
     });
+    
+    // Add a small delay to ensure we get the complete response
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     res.status(201).json({
       sessionId,
@@ -147,8 +151,12 @@ app.post('/api/chat/:sessionId/message', async (req, res) => {
         }
       };
       
-      setTimeout(checkComplete, 500);
+      // Increase timeout to allow for longer responses
+      setTimeout(checkComplete, 2000);
     });
+    
+    // Add a small delay to ensure we get the complete response
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Clean up event listeners
     client.removeListener('message', messageHandler);
@@ -260,8 +268,12 @@ app.post('/api/chat', async (req, res) => {
         }
       };
       
-      setTimeout(checkComplete, 500);
+      // Increase timeout to allow for longer responses
+      setTimeout(checkComplete, 2000);
     });
+    
+    // Add a small delay to ensure we get the complete response
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Reset completion flag for the next message
     isComplete = false;
@@ -279,8 +291,12 @@ app.post('/api/chat', async (req, res) => {
         }
       };
       
-      setTimeout(checkComplete, 500);
+      // Increase timeout to allow for longer responses
+      setTimeout(checkComplete, 2000);
     });
+    
+    // Add a small delay to ensure we get the complete response
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Clean up
     client.disconnect();
@@ -403,8 +419,12 @@ app.post('/api/chat/polling', async (req, res) => {
               }
             };
             
-            setTimeout(checkComplete, 500);
+            // Increase timeout to allow for longer responses
+            setTimeout(checkComplete, 2000);
           });
+          
+          // Add a small delay to ensure we get the complete response
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
           // Update job status to 'complete' in Supabase
           if (supabase) {

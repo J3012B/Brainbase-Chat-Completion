@@ -113,8 +113,9 @@ export class BrainbaseClient extends EventEmitter {
         case 'message':
         case 'response':
           // Regular non-streaming message
-          this.streamBuffer = '';
-          this.emit('message', messageObj.data.message);
+          const fullMessage = messageObj.data.message || '';
+          this.streamBuffer = fullMessage;
+          this.emit('message', fullMessage);
           break;
 
         case 'stream':
@@ -125,12 +126,10 @@ export class BrainbaseClient extends EventEmitter {
           break;
 
         case 'function_call':
-          this.streamBuffer = '';
           this.emit('function_call', messageObj.data.function);
           break;
 
         case 'error':
-          this.streamBuffer = '';
           this.emit('error', messageObj.data.message);
           break;
 
@@ -138,13 +137,11 @@ export class BrainbaseClient extends EventEmitter {
           // End of a streamed message
           if (this.streamBuffer) {
             this.emit('complete', this.streamBuffer);
-            this.streamBuffer = '';
           }
           this.emit('done', messageObj.data);
           break;
 
         default:
-          this.streamBuffer = '';
           this.emit('unknown', { action, data: messageObj.data });
           break;
       }
