@@ -288,6 +288,82 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// Polling endpoint for chat interaction
+app.post('/api/chat/polling', async (req, res) => {
+  try {
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const workerId = process.env.WORKER_ID;
+    const flowId = process.env.FLOW_ID;
+    const apiKey = process.env.BRAINBASE_API_KEY;
+    
+    if (!workerId || !flowId || !apiKey) {
+      return res.status(500).json({ 
+        error: 'Missing environment variables. Please set WORKER_ID, FLOW_ID, and BRAINBASE_API_KEY.' 
+      });
+    }
+    
+    // Create a new client
+    const client = new BrainbaseClient(workerId, flowId, apiKey);
+    
+    // Set up response collection
+    let initialResponse = '';
+    let messageResponse = '';
+    let isComplete = false;
+    
+    const messageHandler = (msg: string) => {
+      // If we haven't received the initial message yet, store it
+      if (!initialResponse) {
+        initialResponse = msg;
+      } else {
+        // Otherwise, this is the response to our message
+        messageResponse = msg;
+      }
+    };
+    
+    const streamHandler = (chunk: string) => {
+      // If we already have an initial response, this is part of the message response
+      if (initialResponse) {
+        messageResponse += chunk;
+      } else {
+        initialResponse += chunk;
+      }
+    };
+    
+    const completeHandler = () => {
+      isComplete = true;
+    };
+    
+    client.on('message', messageHandler);
+    client.on('stream', streamHandler);
+    client.on('complete', completeHandler);
+    client.on('error', (error) => {
+      console.error('Client error:', error);
+    });
+    
+    // Connect to Brainbase
+    await client.connect();
+    
+    // Process the message asynchronously without waiting for a response
+    client.sendMessage(message).catch(error => {
+      console.error('Error sending message in polling endpoint:', error);
+    });
+    
+    // Return immediately with "ok" status
+    res.json({ status: 'ok' });
+  } catch (error) {
+    const errorHandler = (err: any) => {
+      console.error('Error in polling chatbot interaction:', err);
+      res.status(500).json({ error: 'Failed to process message' });
+    };
+    errorHandler(error);
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
