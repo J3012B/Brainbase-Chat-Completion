@@ -8,24 +8,15 @@
   ],
   "functions": {
     "src/index.ts": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "memory": 1024
     }
   },
   "routes": [
     {
-      "src": "/api/chat",
-      "dest": "src/index.ts",
-      "methods": ["POST"]
-    },
-    {
       "src": "/api/chat/polling",
       "dest": "src/index.ts",
       "methods": ["POST"]
-    },
-    {
-      "src": "/api/jobs/(?<jobId>[^/]+)",
-      "dest": "src/index.ts",
-      "methods": ["GET"]
     },
     {
       "src": "/api/chat/session",
@@ -41,6 +32,16 @@
       "src": "/api/chat/(?<sessionId>[^/]+)",
       "dest": "src/index.ts",
       "methods": ["DELETE"]
+    },
+    {
+      "src": "/api/chat",
+      "dest": "src/index.ts",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/api/jobs/(?<jobId>[^/]+)",
+      "dest": "src/index.ts",
+      "methods": ["GET"]
     },
     {
       "src": "/health",
