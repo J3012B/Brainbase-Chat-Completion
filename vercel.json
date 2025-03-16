@@ -33,12 +33,12 @@
       "methods": ["POST"]
     },
     {
-      "src": "/api/chat/:sessionId/message",
+      "src": "/api/chat/(?<sessionId>[^/]+)/message",
       "dest": "src/index.ts",
       "methods": ["POST"]
     },
     {
-      "src": "/api/chat/:sessionId",
+      "src": "/api/chat/(?<sessionId>[^/]+)",
       "dest": "src/index.ts",
       "methods": ["DELETE"]
     },
