@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/index.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/chat",
+      "dest": "src/index.ts",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/api/chat/session",
+      "dest": "src/index.ts",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/api/chat/:sessionId/message",
+      "dest": "src/index.ts",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/api/chat/:sessionId",
+      "dest": "src/index.ts",
+      "methods": ["DELETE"]
+    },
+    {
+      "src": "/health",
+      "dest": "src/index.ts",
+      "methods": ["GET"]
+    },
+    {
+      "src": "/(.*)",
+      "dest": "src/index.ts"
+    }
+  ]
+} 
