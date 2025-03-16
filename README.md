@@ -42,10 +42,33 @@ This application uses Supabase for storing job information. You'll need to:
 2. Create a table called `jobs` with the following schema:
    - `id`: uuid (primary key, default: uuid_generate_v4())
    - `message`: text
-   - `status`: text
+   - `status`: text (possible values: 'processing', 'complete', 'error')
+   - `response`: text (nullable, stores the response when complete)
+   - `error_message`: text (nullable, stores error information if failed)
    - `created_at`: timestamp with time zone
    - `updated_at`: timestamp with time zone
 3. Add your Supabase URL and key to the `.env` file
+
+### Updating an Existing Supabase Schema
+
+If you've already created the `jobs` table but are missing some columns, you can add them through the Supabase dashboard:
+
+1. Log in to your Supabase dashboard
+2. Go to the "Table Editor" section
+3. Select the `jobs` table
+4. Click on "Edit" or the pencil icon
+5. Add the missing columns:
+   - `response`: text (nullable)
+   - `error_message`: text (nullable)
+6. Click "Save" to apply the changes
+
+Alternatively, you can run the following SQL in the SQL Editor:
+
+```sql
+ALTER TABLE jobs 
+ADD COLUMN IF NOT EXISTS response TEXT,
+ADD COLUMN IF NOT EXISTS error_message TEXT;
+```
 
 ## API Endpoints
 
@@ -156,6 +179,31 @@ Closes an existing chat session.
 }
 ```
 
+### Job Status
+
+```
+GET /api/jobs/:jobId
+```
+
+Retrieves the status and details of a job.
+
+**Response:**
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "message": "Hello, how are you?",
+  "status": "complete",
+  "response": "I'm doing well, thank you for asking! How about you?",
+  "created_at": "2023-01-01T12:00:00.000Z",
+  "updated_at": "2023-01-01T12:00:10.000Z"
+}
+```
+
+Possible status values:
+- `processing`: The job is still being processed
+- `complete`: The job has completed successfully
+- `error`: The job encountered an error
+
 ### Health Check
 
 ```
@@ -187,4 +235,4 @@ For more examples and usage instructions, see the [examples/README.md](examples/
 
 This API integrates with the Brainbase Python chatbot service using WebSockets. It handles the connection, message sending, and response processing, providing a RESTful API interface for client applications.
 
-The original Python code is located in the `hello_world` directory and is used as a reference for the TypeScript implementation. 
+The original Python code is located in the `hello_world` directory and is used as a reference for the TypeScript implementation.

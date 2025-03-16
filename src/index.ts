@@ -358,11 +358,6 @@ app.post('/api/chat/polling', async (req, res) => {
     // Connect to Brainbase
     await client.connect();
     
-    // Process the message asynchronously without waiting for a response
-    client.sendMessage(message).catch(error => {
-      console.error('Error sending message in polling endpoint:', error);
-    });
-    
     // Store job in Supabase
     let jobId = null;
     
@@ -393,6 +388,122 @@ app.post('/api/chat/polling', async (req, res) => {
       console.warn('Supabase client not initialized. Job not stored.');
     }
     
+    // Process the message asynchronously without waiting for a response
+    if (jobId) {
+      // Handle the message processing in the background
+      client.sendMessage(message)
+        .then(async () => {
+          // Wait for the response to be complete
+          await new Promise<void>((resolve) => {
+            const checkComplete = () => {
+              if (isComplete || messageResponse) {
+                resolve();
+              } else {
+                setTimeout(checkComplete, 100);
+              }
+            };
+            
+            setTimeout(checkComplete, 500);
+          });
+          
+          // Update job status to 'complete' in Supabase
+          if (supabase) {
+            try {
+              const timestamp = new Date().toISOString();
+              
+              // First, check if the table has the response column
+              const { data: tableInfo, error: tableError } = await supabase
+                .from('jobs')
+                .select('*')
+                .limit(1);
+              
+              let updateData: any = { 
+                status: 'complete',
+                updated_at: timestamp
+              };
+              
+              // Only include response field if it exists in the schema
+              if (!tableError && tableInfo && tableInfo.length > 0) {
+                const sampleRow = tableInfo[0];
+                if ('response' in sampleRow) {
+                  updateData.response = messageResponse || initialResponse;
+                } else {
+                  console.warn("The 'response' column doesn't exist in the jobs table. Skipping response update.");
+                }
+              }
+              
+              const { error } = await supabase
+                .from('jobs')
+                .update(updateData)
+                .eq('id', jobId);
+              
+              if (error) {
+                console.error('Error updating job status in Supabase:', error);
+              } else {
+                console.log(`Job ${jobId} marked as complete`);
+              }
+            } catch (dbError) {
+              console.error('Error updating job in Supabase:', dbError);
+            }
+          }
+          
+          // Clean up
+          client.disconnect();
+        })
+        .catch(async (error) => {
+          console.error('Error sending message in polling endpoint:', error);
+          
+          // Update job status to 'error' in Supabase
+          if (supabase) {
+            try {
+              const timestamp = new Date().toISOString();
+              
+              // First, check if the table has the error_message column
+              const { data: tableInfo, error: tableError } = await supabase
+                .from('jobs')
+                .select('*')
+                .limit(1);
+              
+              let updateData: any = { 
+                status: 'error',
+                updated_at: timestamp
+              };
+              
+              // Only include error_message field if it exists in the schema
+              if (!tableError && tableInfo && tableInfo.length > 0) {
+                const sampleRow = tableInfo[0];
+                if ('error_message' in sampleRow) {
+                  updateData.error_message = error.message || 'Unknown error';
+                } else {
+                  console.warn("The 'error_message' column doesn't exist in the jobs table. Skipping error message update.");
+                }
+              }
+              
+              const { error: dbError } = await supabase
+                .from('jobs')
+                .update(updateData)
+                .eq('id', jobId);
+              
+              if (dbError) {
+                console.error('Error updating job error status in Supabase:', dbError);
+              } else {
+                console.log(`Job ${jobId} marked as error`);
+              }
+            } catch (updateError) {
+              console.error('Error updating job error status in Supabase:', updateError);
+            }
+          }
+          
+          // Clean up
+          client.disconnect();
+        });
+    } else {
+      // If we couldn't store the job in Supabase, still process the message
+      client.sendMessage(message).catch(error => {
+        console.error('Error sending message in polling endpoint:', error);
+      });
+    }
+    
     // Return with "ok" status and job ID if available
     res.json({ 
       status: 'ok',
@@ -410,6 +521,44 @@ app.post('/api/chat/polling', async (req, res) => {
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Job status endpoint
+app.get('/api/jobs/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    
+    if (!jobId) {
+      return res.status(400).json({ error: 'Job ID is required' });
+    }
+    
+    if (!supabase) {
+      return res.status(500).json({ error: 'Supabase client not initialized' });
+    }
+    
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching job from Supabase:', error);
+      return res.status(500).json({ error: 'Failed to fetch job information' });
+    }
+    
+    if (!data) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    
+    res.json(data);
+  } catch (error) {
+    const errorHandler = (err: any) => {
+      console.error('Error fetching job status:', err);
+      res.status(500).json({ error: 'Failed to fetch job status' });
+    };
+    errorHandler(error);
+  }
 });
 
 // Start the server
