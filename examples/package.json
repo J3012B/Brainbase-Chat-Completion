@@ -1,0 +1,12 @@
+{
+  "name": "story-editor-api-examples",
+  "version": "1.0.0",
+  "description": "Examples for using the Story Editor API",
+  "main": "node-client.js",
+  "scripts": {
+    "start": "node node-client.js"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.7"
+  }
+} 

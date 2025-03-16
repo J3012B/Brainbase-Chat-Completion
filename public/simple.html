@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chatbot Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f2f2f2;
+            border-radius: 5px;
+            min-height: 50px;
+        }
+        .input-container {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            margin-top: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Simple Chatbot Example</h1>
+    <p>This example demonstrates the single-call chatbot endpoint that handles the complete interaction in one request.</p>
+    
+    <div class="container">
+        <h2>Send a Message</h2>
+        <div class="input-container">
+            <input type="text" id="message-input" placeholder="Type your message here...">
+            <button id="send-button">Send</button>
+        </div>
+        <div id="loading" class="loading">Processing your message...</div>
+        
+        <h3>Response:</h3>
+        <div id="response" class="response">
+            <em>Response will appear here</em>
+        </div>
+    </div>
+
+    <script>
+        // API endpoint
+        const API_URL = 'http://localhost:3000/api/chat';
+        
+        // DOM elements
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const responseElement = document.getElementById('response');
+        const loadingElement = document.getElementById('loading');
+        
+        // Send a message to the chatbot
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            
+            if (!message) return;
+            
+            try {
+                // Show loading indicator
+                loadingElement.style.display = 'block';
+                
+                // Disable input while waiting for response
+                messageInput.disabled = true;
+                sendButton.disabled = true;
+                
+                // Send message to API
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message })
+                });
+                
+                const data = await response.json();
+                
+                // Hide loading indicator
+                loadingElement.style.display = 'none';
+                
+                if (response.ok) {
+                    // Display the response
+                    responseElement.textContent = data.response;
+                } else {
+                    responseElement.textContent = `Error: ${data.error}`;
+                }
+                
+                // Re-enable input
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                messageInput.focus();
+            } catch (error) {
+                // Hide loading indicator
+                loadingElement.style.display = 'none';
+                
+                responseElement.textContent = `Error: ${error.message}`;
+                
+                // Re-enable input
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+            }
+        }
+        
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html> 

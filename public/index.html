@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Editor Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .chat-container {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e6f7ff;
+            text-align: right;
+        }
+        .bot-message {
+            background-color: #f2f2f2;
+        }
+        .input-container {
+            display: flex;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .examples {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Story Editor Chat</h1>
+    <div class="chat-container" id="chat-container"></div>
+    <div class="input-container">
+        <input type="text" id="message-input" placeholder="Type your message here..." disabled>
+        <button id="send-button" disabled>Send</button>
+        <button id="start-button">Start Chat</button>
+        <button id="end-button" disabled>End Chat</button>
+    </div>
+    
+    <div class="examples">
+        <h3>Other Examples:</h3>
+        <p><a href="/simple.html">Simple Single-Call Example</a> - See how to use the simplified single-call API endpoint</p>
+    </div>
+
+    <script>
+        // API endpoint
+        const API_URL = 'http://localhost:3000/api';
+        
+        // DOM elements
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const startButton = document.getElementById('start-button');
+        const endButton = document.getElementById('end-button');
+        
+        // Chat session ID
+        let sessionId = null;
+        
+        // Add a message to the chat container
+        function addMessage(message, isUser = false) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            messageElement.classList.add(isUser ? 'user-message' : 'bot-message');
+            messageElement.textContent = message;
+            chatContainer.appendChild(messageElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // Start a new chat session
+        async function startChat() {
+            try {
+                startButton.disabled = true;
+                
+                const response = await fetch(`${API_URL}/chat/session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    sessionId = data.sessionId;
+                    addMessage(data.message);
+                    
+                    // Enable chat controls
+                    messageInput.disabled = false;
+                    sendButton.disabled = false;
+                    endButton.disabled = false;
+                } else {
+                    addMessage(`Error: ${data.error}`);
+                    startButton.disabled = false;
+                }
+            } catch (error) {
+                addMessage(`Error: ${error.message}`);
+                startButton.disabled = false;
+            }
+        }
+        
+        // Send a message to the chat
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            
+            if (!message || !sessionId) return;
+            
+            try {
+                // Disable input while waiting for response
+                messageInput.disabled = true;
+                sendButton.disabled = true;
+                
+                // Add user message to chat
+                addMessage(message, true);
+                
+                // Clear input
+                messageInput.value = '';
+                
+                // Send message to API
+                const response = await fetch(`${API_URL}/chat/${sessionId}/message`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Add bot response to chat
+                    addMessage(data.response);
+                } else {
+                    addMessage(`Error: ${data.error}`);
+                }
+                
+                // Re-enable input
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                messageInput.focus();
+            } catch (error) {
+                addMessage(`Error: ${error.message}`);
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+            }
+        }
+        
+        // End the chat session
+        async function endChat() {
+            if (!sessionId) return;
+            
+            try {
+                endButton.disabled = true;
+                
+                const response = await fetch(`${API_URL}/chat/${sessionId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addMessage('Chat session ended.');
+                    
+                    // Reset chat controls
+                    sessionId = null;
+                    messageInput.disabled = true;
+                    sendButton.disabled = true;
+                    startButton.disabled = false;
+                } else {
+                    addMessage(`Error: ${data.error}`);
+                    endButton.disabled = false;
+                }
+            } catch (error) {
+                addMessage(`Error: ${error.message}`);
+                endButton.disabled = false;
+            }
+        }
+        
+        // Event listeners
+        startButton.addEventListener('click', startChat);
+        endButton.addEventListener('click', endChat);
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // Initial message
+        addMessage('Welcome to Story Editor Chat! Click "Start Chat" to begin.');
+    </script>
+</body>
+</html> 
