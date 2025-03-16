@@ -3,9 +3,19 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { BrainbaseClient } from './services/BrainbaseClient';
+import { createClient } from '@supabase/supabase-js';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize Supabase client
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+let supabase: any = null;
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -353,8 +363,41 @@ app.post('/api/chat/polling', async (req, res) => {
       console.error('Error sending message in polling endpoint:', error);
     });
     
-    // Return immediately with "ok" status
-    res.json({ status: 'ok' });
+    // Store job in Supabase
+    let jobId = null;
+    
+    if (supabase) {
+      try {
+        const timestamp = new Date().toISOString();
+        const { data, error } = await supabase
+          .from('jobs')
+          .insert([
+            { 
+              message, 
+              status: 'processing',
+              created_at: timestamp,
+              updated_at: timestamp
+            }
+          ])
+          .select();
+        
+        if (error) {
+          console.error('Error storing job in Supabase:', error);
+        } else if (data && data.length > 0) {
+          jobId = data[0].id;
+        }
+      } catch (dbError) {
+        console.error('Error interacting with Supabase:', dbError);
+      }
+    } else {
+      console.warn('Supabase client not initialized. Job not stored.');
+    }
+    
+    // Return with "ok" status and job ID if available
+    res.json({ 
+      status: 'ok',
+      jobId
+    });
   } catch (error) {
     const errorHandler = (err: any) => {
       console.error('Error in polling chatbot interaction:', err);
